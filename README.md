@@ -64,7 +64,6 @@ Note: live fetching may not work without the proxy.
 3.	Open: http://localhost:8080
 
 ### Mapbox token
-This project uses Mapbox for geocoding.
-Get your own free token at https://account.mapbox.com/access-tokens/ 
-Then change this to your token
-var MAPBOX_TOKEN = 'YOUR_PUBLIC_MAPBOX_TOKEN';
+- This project uses Mapbox for geocoding.
+- Get your own free token at https://account.mapbox.com/access-tokens/ 
+- Then change this in the index.html to your token 'YOUR_PUBLIC_MAPBOX_TOKEN'
