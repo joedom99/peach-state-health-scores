@@ -6,6 +6,7 @@ Peach State Health Scores is a lightweight, map-first web app that makes Georgia
 
 Live demo: https://health.countryfriedlabs.com  
 Devpost: https://devpost.com/software/peach-state-health-scores
+Video overview: https://youtu.be/9CnYg4TZfD0?si=NXNZvzKptP8Uqcwq
 
 ---
 
