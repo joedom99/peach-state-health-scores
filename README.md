@@ -65,7 +65,6 @@ Note: live fetching may not work without the proxy.
 
 ### Mapbox token
 This project uses Mapbox for geocoding.
-To run locally, create a `config.js` file with:
-
-```js
-window.MAPBOX_TOKEN = 'YOUR_PUBLIC_MAPBOX_TOKEN';
+Get your own free token at https://account.mapbox.com/access-tokens/ 
+Then change this to your token
+var MAPBOX_TOKEN = 'YOUR_PUBLIC_MAPBOX_TOKEN';
