@@ -4,9 +4,9 @@
 
 Peach State Health Scores is a lightweight, map-first web app that makes Georgia restaurant health inspection scores easy to find and explore—starting around Georgia Tech / metro Atlanta and expanding as you browse. Built for the 2026 Georgia Tech Hacklytics hackathon.
 
-Live demo: https://health.countryfriedlabs.com  
-Devpost: https://devpost.com/software/peach-state-health-scores
-Video overview: https://youtu.be/9CnYg4TZfD0?si=NXNZvzKptP8Uqcwq
+- Live demo: https://health.countryfriedlabs.com  
+- Devpost: https://devpost.com/software/peach-state-health-scores
+- Video overview: https://youtu.be/9CnYg4TZfD0?si=NXNZvzKptP8Uqcwq
 
 ---
 
