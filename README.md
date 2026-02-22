@@ -61,3 +61,10 @@ Note: live fetching may not work without the proxy.
 1. Put `index.html` and `proxy.php` in the same folder.
 2. From that folder, start a local PHP server: php -S localhost:8080
 3.	Open: http://localhost:8080
+
+### Mapbox token
+This project uses Mapbox for geocoding.
+To run locally, create a `config.js` file with:
+
+```js
+window.MAPBOX_TOKEN = 'YOUR_PUBLIC_MAPBOX_TOKEN';
