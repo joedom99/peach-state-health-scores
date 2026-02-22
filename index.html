@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🍑 Peach State Health Scores</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;height:100vh;display:flex;flex-direction:column}
+header{background:#1e293b;border-bottom:1px solid #334155;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;z-index:1000}
+header h1{font-size:16px;font-weight:700;color:#f8fafc;white-space:nowrap}
+header h1 span{color:#60a5fa}
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex:1}
+.search-box{display:flex;align-items:center;background:#0f172a;border:1px solid #475569;border-radius:8px;padding:5px 10px;flex:1;min-width:180px;max-width:340px}
+.search-box input{background:none;border:none;color:#e2e8f0;font-size:13px;outline:none;width:100%}
+.search-box input::placeholder{color:#64748b}
+select,.btn{background:#0f172a;border:1px solid #475569;color:#e2e8f0;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer}
+.btn{font-weight:600;white-space:nowrap}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-locate{background:#059669;border-color:#059669}
+.btn-locate:hover{background:#047857}
+#map{flex:1;z-index:1}
+.status-bar{background:#1e293b;border-top:1px solid #334155;padding:6px 16px;font-size:12px;color:#94a3b8;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
+.legend{display:flex;gap:14px;align-items:center}
+.legend-item{display:flex;align-items:center;gap:4px;font-size:11px}
+.legend-dot{width:10px;height:10px;border-radius:50%;border:2px solid rgba(255,255,255,.3)}
+.leaflet-popup-content-wrapper{background:#1e293b!important;color:#e2e8f0!important;border-radius:10px!important;border:1px solid #334155!important;box-shadow:0 6px 20px rgba(0,0,0,.4)!important}
+.leaflet-popup-tip{background:#1e293b!important}
+.popup h3{font-size:14px;margin-bottom:6px;color:#f8fafc}
+.popup .addr{font-size:11px;color:#94a3b8;margin-bottom:8px}
+.popup .badge{display:inline-block;padding:3px 10px;border-radius:16px;font-weight:700;font-size:13px;margin-bottom:6px}
+.popup .badge.a{background:rgba(34,197,94,.2);color:#4ade80}
+.popup .badge.b{background:rgba(234,179,8,.2);color:#facc15}
+.popup .badge.c{background:rgba(249,115,22,.2);color:#fb923c}
+.popup .badge.u{background:rgba(239,68,68,.2);color:#f87171}
+.popup .meta{font-size:11px;color:#64748b;margin-bottom:8px}
+.popup .meta span{color:#94a3b8}
+.popup .report-link{display:inline-block;margin-top:4px;padding:4px 10px;background:rgba(96,165,250,.15);color:#60a5fa;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none}
+.popup .report-link:hover{background:rgba(96,165,250,.25)}
+.loading-badge{position:absolute;top:70px;left:50%;transform:translateX(-50%);z-index:1000;background:#1e293b;border:1px solid #475569;padding:8px 16px;border-radius:8px;font-size:12px;color:#94a3b8;box-shadow:0 4px 12px rgba(0,0,0,.3);display:none}
+.loading-badge.visible{display:flex;align-items:center;gap:8px}
+.loading-badge .mini-spin{width:14px;height:14px;border:2px solid #334155;border-top-color:#60a5fa;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>🍑 <span>Peach State</span> Health Scores 🍽️</h1>
+  <div class="controls">
+    <div class="search-box">
+      <input type="text" id="search" placeholder="Filter restaurants..."/>
+    </div>
+    <select id="grade">
+      <option value="all">All Grades</option>
+      <option value="A">A (90-100)</option>
+      <option value="B">B (80-89)</option>
+      <option value="C">C (70-79)</option>
+      <option value="U">U (&lt;70)</option>
+    </select>
+    <button class="btn btn-locate" id="locateBtn">📍 Near Me</button>
+  </div>
+</header>
+<div id="map"></div>
+<div class="loading-badge" id="loadBadge"><div class="mini-spin"></div><span id="loadBadgeText">Loading...</span></div>
+<div class="status-bar">
+  <span id="status">Loading...</span>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>A</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#eab308"></div>B</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div>C</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>U</div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+  // ─── Config ───
+  var GT = [33.7756, -84.3963];
+  var PROXY = '/proxy.php';
+  var DPH_SITE = 'https://ga.healthinspections.us/stateofgeorgia/';
+  
+  // Get your own free token at https://account.mapbox.com/access-tokens/ 
+  var MAPBOX_TOKEN = 'YOUR_PUBLIC_MAPBOX_TOKEN';
+
+  // Cities/areas in metro Atlanta with approx centers, used for viewport-based loading
+  var CITY_ZONES = [
+    {name:"Atlanta",lat:33.749,lng:-84.388,r:0.08},
+    {name:"Midtown",lat:33.784,lng:-84.383,r:0.03},
+    {name:"Decatur",lat:33.775,lng:-84.296,r:0.04},
+    {name:"East Point",lat:33.680,lng:-84.439,r:0.03},
+    {name:"College Park",lat:33.653,lng:-84.449,r:0.03},
+    {name:"Sandy Springs",lat:33.924,lng:-84.379,r:0.04},
+    {name:"Roswell",lat:34.023,lng:-84.361,r:0.05},
+    {name:"Alpharetta",lat:34.075,lng:-84.294,r:0.05},
+    {name:"Marietta",lat:33.953,lng:-84.550,r:0.05},
+    {name:"Smyrna",lat:33.884,lng:-84.514,r:0.03},
+    {name:"Brookhaven",lat:33.859,lng:-84.340,r:0.03},
+    {name:"Dunwoody",lat:33.946,lng:-84.334,r:0.03},
+    {name:"Chamblee",lat:33.893,lng:-84.298,r:0.03},
+    {name:"Tucker",lat:33.855,lng:-84.217,r:0.03},
+    {name:"Doraville",lat:33.898,lng:-84.283,r:0.03},
+    {name:"Avondale Estates",lat:33.772,lng:-84.267,r:0.02},
+    {name:"Kennesaw",lat:34.023,lng:-84.616,r:0.04},
+    {name:"Acworth",lat:34.066,lng:-84.677,r:0.03},
+    {name:"Woodstock",lat:34.102,lng:-84.519,r:0.04},
+    {name:"Johns Creek",lat:34.029,lng:-84.198,r:0.04},
+    {name:"Duluth",lat:34.000,lng:-84.145,r:0.03},
+    {name:"Lawrenceville",lat:33.956,lng:-83.988,r:0.04},
+    {name:"Norcross",lat:33.941,lng:-84.213,r:0.03},
+    {name:"Lithonia",lat:33.713,lng:-84.105,r:0.03},
+    {name:"Stone Mountain",lat:33.808,lng:-84.170,r:0.04},
+    {name:"Clarkston",lat:33.810,lng:-84.240,r:0.02},
+    {name:"Conyers",lat:33.667,lng:-84.018,r:0.04},
+    {name:"Peachtree City",lat:33.397,lng:-84.596,r:0.04},
+    {name:"Newnan",lat:33.381,lng:-84.800,r:0.04},
+    {name:"Douglasville",lat:33.752,lng:-84.748,r:0.04},
+    {name:"Mableton",lat:33.816,lng:-84.562,r:0.03},
+    {name:"Austell",lat:33.812,lng:-84.634,r:0.03},
+    {name:"Stockbridge",lat:33.544,lng:-84.234,r:0.03},
+    {name:"McDonough",lat:33.447,lng:-84.147,r:0.04},
+    {name:"Vinings",lat:33.864,lng:-84.468,r:0.02},
+    {name:"Buckhead",lat:33.838,lng:-84.378,r:0.03},
+    {name:"Grant Park",lat:33.740,lng:-84.370,r:0.02},
+    {name:"Virginia-Highland",lat:33.787,lng:-84.352,r:0.02},
+    {name:"Inman Park",lat:33.762,lng:-84.354,r:0.02},
+    {name:"Little Five Points",lat:33.764,lng:-84.349,r:0.02},
+    {name:"Kirkwood",lat:33.757,lng:-84.323,r:0.02},
+    {name:"East Atlanta",lat:33.740,lng:-84.341,r:0.02},
+    {name:"West End",lat:33.736,lng:-84.413,r:0.02},
+    {name:"Westview",lat:33.738,lng:-84.432,r:0.02}
+  ];
+
+  // ─── Pre-loaded restaurants near Georgia Tech ───
+  var PRELOADED = [
+    {n:"The Varsity",a:"61 North Ave NW, Atlanta, GA 30308",s:88,d:"02-10-2026",lat:33.7716,lng:-84.3894},
+    {n:"Tin Drum Asian Kitchen",a:"88 5th St NW, Atlanta, GA 30308",s:94,d:"02-05-2026",lat:33.7778,lng:-84.3891},
+    {n:"Waffle House - Tech",a:"120 North Ave NW, Atlanta, GA 30313",s:90,d:"01-28-2026",lat:33.7711,lng:-84.3923},
+    {n:"Sublime Doughnuts",a:"535 10th St NW, Atlanta, GA 30318",s:89,d:"02-03-2026",lat:33.7814,lng:-84.3996},
+    {n:"Antico Pizza",a:"1093 Hemphill Ave NW, Atlanta, GA 30318",s:92,d:"01-22-2026",lat:33.7817,lng:-84.4065},
+    {n:"Hattie B's Hot Chicken",a:"299 N Highland Ave NE, Atlanta, GA 30307",s:95,d:"02-07-2026",lat:33.7681,lng:-84.3506},
+    {n:"Mary Mac's Tea Room",a:"224 Ponce De Leon Ave NE, Atlanta, GA 30308",s:91,d:"01-30-2026",lat:33.7726,lng:-84.3798},
+    {n:"Slutty Vegan - Westview",a:"1542 Ralph David Abernathy Blvd, Atlanta, GA 30310",s:97,d:"02-08-2026",lat:33.7382,lng:-84.4289},
+    {n:"Chick-fil-A Georgia Tech",a:"645 Ferst Dr NW, Atlanta, GA 30332",s:98,d:"02-12-2026",lat:33.7746,lng:-84.3978},
+    {n:"Taqueria del Sol",a:"1200 Howell Mill Rd NW, Atlanta, GA 30318",s:92,d:"01-25-2026",lat:33.7870,lng:-84.4105},
+    {n:"JCT Kitchen & Bar",a:"1198 Howell Mill Rd NW Ste 18, Atlanta, GA 30318",s:91,d:"02-01-2026",lat:33.7862,lng:-84.4098},
+    {n:"Bacchanalia",a:"1198 Howell Mill Rd NW, Atlanta, GA 30318",s:99,d:"01-15-2026",lat:33.7866,lng:-84.4100},
+    {n:"Poor Calvin's",a:"510 Piedmont Ave NE, Atlanta, GA 30308",s:93,d:"02-06-2026",lat:33.7714,lng:-84.3810},
+    {n:"South City Kitchen",a:"1144 Crescent Ave NE, Atlanta, GA 30309",s:93,d:"01-18-2026",lat:33.7879,lng:-84.3822},
+    {n:"Empire State South",a:"999 Peachtree St NE, Atlanta, GA 30309",s:95,d:"02-09-2026",lat:33.7857,lng:-84.3837},
+    {n:"Ponce City Market Food Hall",a:"675 Ponce De Leon Ave NE, Atlanta, GA 30308",s:87,d:"01-20-2026",lat:33.7726,lng:-84.3654},
+    {n:"Home Grown",a:"968 Memorial Dr SE, Atlanta, GA 30316",s:94,d:"02-04-2026",lat:33.7423,lng:-84.3549},
+    {n:"Fox Bros BBQ",a:"1238 Dekalb Ave NE, Atlanta, GA 30307",s:94,d:"01-27-2026",lat:33.7678,lng:-84.3413},
+    {n:"Staplehouse",a:"541 Edgewood Ave SE, Atlanta, GA 30312",s:98,d:"02-11-2026",lat:33.7544,lng:-84.3690},
+    {n:"Busy Bee Cafe",a:"810 Martin Luther King Jr Dr, Atlanta, GA 30314",s:85,d:"01-19-2026",lat:33.7546,lng:-84.4172},
+    {n:"Nuevo Laredo Cantina",a:"1495 Chattahoochee Ave NW, Atlanta, GA 30318",s:82,d:"01-16-2026",lat:33.7969,lng:-84.4290},
+    {n:"Cypress Street Pint & Plate",a:"817 W Peachtree St NW, Atlanta, GA 30308",s:90,d:"02-02-2026",lat:33.7792,lng:-84.3879},
+    {n:"Mellow Mushroom",a:"931 Monroe Dr NE, Atlanta, GA 30308",s:88,d:"02-05-2026",lat:33.7821,lng:-84.3640},
+    {n:"Optimist",a:"914 Howell Mill Rd NW, Atlanta, GA 30318",s:96,d:"01-23-2026",lat:33.7822,lng:-84.4069},
+    {n:"Takorea",a:"818 Juniper St NE, Atlanta, GA 30308",s:91,d:"02-07-2026",lat:33.7790,lng:-84.3818},
+    {n:"BeetleCat",a:"299 N Highland Ave NE, Atlanta, GA 30307",s:97,d:"02-10-2026",lat:33.7679,lng:-84.3508},
+    {n:"Bantam + Biddy",a:"1544 Piedmont Ave NE, Atlanta, GA 30324",s:93,d:"01-17-2026",lat:33.7972,lng:-84.3689},
+    {n:"Fred's Meat & Bread",a:"99 Krog St NE, Atlanta, GA 30307",s:91,d:"02-06-2026",lat:33.7591,lng:-84.3636},
+    {n:"Wendy's - Peachtree",a:"700 Peachtree St NE, Atlanta, GA 30308",s:84,d:"02-08-2026",lat:33.7745,lng:-84.3850},
+    {n:"McDonald's - North Ave",a:"71 North Ave NW, Atlanta, GA 30308",s:86,d:"01-26-2026",lat:33.7713,lng:-84.3900},
+    {n:"Zaxby's - Spring St",a:"274 Spring St NW, Atlanta, GA 30313",s:90,d:"02-03-2026",lat:33.7685,lng:-84.3895},
+    {n:"Goodfellas Pizza",a:"1055 Howell Mill Rd NW, Atlanta, GA 30318",s:87,d:"02-09-2026",lat:33.7831,lng:-84.4057},
+    {n:"White Bull",a:"123 10th St NE, Atlanta, GA 30309",s:96,d:"02-01-2026",lat:33.7838,lng:-84.3792},
+    {n:"Jacks Pizza & Wings",a:"676 Techwood Dr NW, Atlanta, GA 30313",s:82,d:"02-02-2026",lat:33.7740,lng:-84.3928},
+    {n:"GT Dining - Brittain",a:"855 Brittain Dr NW, Atlanta, GA 30318",s:96,d:"02-13-2026",lat:33.7721,lng:-84.3912},
+    {n:"GT Dining - Nav Nguyen",a:"266 4th St NW, Atlanta, GA 30332",s:97,d:"02-13-2026",lat:33.7726,lng:-84.3960},
+    {n:"Ocean Wave",a:"820 N Highland Ave, Atlanta, GA 30306",s:87,d:"02-13-2026",lat:33.7898,lng:-84.3526},
+    {n:"Gyro King",a:"1389 Northside Dr NW, Atlanta, GA 30318",s:83,d:"01-14-2026",lat:33.7900,lng:-84.4150},
+    {n:"Rathbun's",a:"112 Krog St NE, Atlanta, GA 30307",s:96,d:"01-28-2026",lat:33.7589,lng:-84.3635},
+    {n:"Kevin Rathbun Steak",a:"154 Krog St NE, Atlanta, GA 30307",s:97,d:"01-28-2026",lat:33.7594,lng:-84.3634},
+    {n:"Bone Garden Cantina",a:"1425 Ellsworth Industrial Blvd NW, Atlanta, GA 30318",s:90,d:"01-22-2026",lat:33.7926,lng:-84.4220},
+    {n:"Two Urban Licks",a:"820 Ralph McGill Blvd NE, Atlanta, GA 30306",s:94,d:"02-10-2026",lat:33.7646,lng:-84.3594},
+    {n:"Murphy's",a:"997 Virginia Ave NE, Atlanta, GA 30306",s:92,d:"02-05-2026",lat:33.7864,lng:-84.3510},
+    {n:"Eats",a:"600 Ponce De Leon Ave NE, Atlanta, GA 30308",s:88,d:"01-15-2026",lat:33.7729,lng:-84.3668},
+    {n:"The Porter Beer Bar",a:"1156 Euclid Ave NE, Atlanta, GA 30307",s:91,d:"02-04-2026",lat:33.7639,lng:-84.3466},
+    {n:"Pancake Social",a:"1039 Grant St SE, Atlanta, GA 30315",s:95,d:"01-21-2026",lat:33.7385,lng:-84.3814},
+    {n:"Alma Cocina",a:"400 Central Park Pl NE, Atlanta, GA 30312",s:96,d:"01-18-2026",lat:33.7553,lng:-84.3625},
+    {n:"Colonnade Restaurant",a:"1879 Cheshire Bridge Rd NE, Atlanta, GA 30324",s:92,d:"02-02-2026",lat:33.8158,lng:-84.3565}
+  ];
+
+  // ─── State ───
+  var map = L.map('map').setView(GT, 14);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+    attribution:'© OSM © CARTO',maxZoom:19
+  }).addTo(map);
+  var layer = L.layerGroup().addTo(map);
+  var markers = [];
+  var knownNames = {};   // lowercase name -> true, for deduplication
+  var fetchedCities = {}; // city name -> true, to avoid re-fetching
+  var viewportLoading = false;
+  var userMarker = null;
+
+  // ─── Helpers ───
+  function grade(s){s=+s;if(isNaN(s))return'U';if(s>=90)return'A';if(s>=80)return'B';if(s>=70)return'C';return'U'}
+  function gColor(g){return{A:'#22c55e',B:'#eab308',C:'#f97316',U:'#ef4444'}[g]||'#94a3b8'}
+  function icon(g){
+    return L.divIcon({className:'',iconSize:[26,26],iconAnchor:[13,13],popupAnchor:[0,-15],
+      html:'<div style="width:26px;height:26px;border-radius:50%;background:'+gColor(g)+
+      ';border:2px solid rgba(255,255,255,.4);display:flex;align-items:center;justify-content:center;'+
+      'font-size:12px;font-weight:800;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.4);font-family:sans-serif">'+g+'</div>'})
+  }
+  function esc(s){var d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
+  function b64(s){return btoa(unescape(encodeURIComponent(s)))}
+
+  // ─── Build popup HTML ───
+  function popupHtml(name,addr,score,date,dphId){
+    var g = grade(score);
+    // Build the "View Full Report" link
+    // If we have a DPH facility ID, link directly to the facility page
+    // Otherwise link to a search for the restaurant name
+    var reportUrl;
+    if(dphId){
+      reportUrl = DPH_SITE + '#facility/' + encodeURIComponent(dphId);
+    } else {
+      reportUrl = DPH_SITE + '#search/' + encodeURIComponent(name);
+    }
+    return '<div class="popup"><h3>'+esc(name)+'</h3>'+
+      '<div class="addr">'+esc(addr)+'</div>'+
+      '<div class="badge '+g.toLowerCase()+'">Score: '+score+' &bull; Grade '+g+'</div>'+
+      '<div class="meta">Inspected: <span>'+esc(date)+'</span></div>'+
+      '<a class="report-link" href="'+reportUrl+'" target="_blank" rel="noopener">📋 View Full Report on DPH Site</a>'+
+      '</div>';
+  }
+
+  // ─── Add marker ───
+  function addMarker(name,addr,score,date,lat,lng,dphId){
+    var g = grade(score);
+    var m = L.marker([lat,lng],{icon:icon(g)}).bindPopup(
+      popupHtml(name,addr,score,date,dphId), {maxWidth:280}
+    );
+    m._g = g; m._n = name.toLowerCase();
+    markers.push(m);
+    layer.addLayer(m);
+    knownNames[m._n] = true;
+  }
+
+  // ─── Load preloaded data ───
+  function loadPreloaded(){
+    PRELOADED.forEach(function(r){addMarker(r.n,r.a,r.s,r.d,r.lat,r.lng,null)});
+    setStatus(markers.length+' restaurants loaded near Georgia Tech');
+  }
+
+  // ─── Client-side filter ───
+  function filter(){
+    var q = document.getElementById('search').value.toLowerCase().trim();
+    var gf = document.getElementById('grade').value;
+    var count = 0;
+    layer.clearLayers();
+    markers.forEach(function(m){
+      if((!q || m._n.indexOf(q)!==-1) && (gf==='all'||m._g===gf)){
+        layer.addLayer(m); count++;
+      }
+    });
+    setStatus('Showing '+count+' of '+markers.length+' restaurants');
+  }
+
+  // ─── Parse a DPH API record ───
+  function parseDPH(rec){
+    var cols=rec.columns||{}, score='', date='';
+    var addr=(rec.mapAddress||'').replace(/[\r\n]+/g,', ').trim();
+    for(var k in cols){
+      var v=cols[k];
+      if(/Last Inspection Score/i.test(v)){var m=v.match(/Score:\s*(\d+)/i);if(m)score=m[1]}
+      if(/Last Inspection Date/i.test(v)){var m2=v.match(/Date:\s*([\d\-\/]+)/i);if(m2)date=m2[1]}
+    }
+    return{name:rec.name||'Unknown',addr:addr,score:score,date:date,id:rec.id||''}
+  }
+
+  // ─── Geocode via Mapbox ───
+  function geocode(addr){
+    return fetch('https://api.mapbox.com/v4/geocode/mapbox.places/'+encodeURIComponent(addr)+'.json?access_token='+MAPBOX_TOKEN)
+      .then(function(r){return r.json()})
+      .then(function(d){
+        if(d.features&&d.features.length){var c=d.features[0].center;return{lat:c[1],lng:c[0]}}
+        return null
+      }).catch(function(){return null})
+  }
+
+  // ─── Fetch a city from DPH and add markers ───
+  async function fetchCity(cityName){
+    var searchParams = JSON.stringify({city:b64(cityName)});
+    var allRecs = [];
+
+    // Fetch up to 10 pages (50 results) per city
+    for(var pg=0; pg<10; pg++){
+      try{
+        var url = PROXY+'?endpoint=search&params='+encodeURIComponent(searchParams)+'&page='+pg;
+        var resp = await fetch(url);
+        if(!resp.ok) break;
+        var data = await resp.json();
+        if(data.error || !Array.isArray(data) || !data.length) break;
+        allRecs = allRecs.concat(data);
+        if(data.length < 5) break;
+      } catch(e){ break; }
+    }
+
+    // Parse, dedupe, geocode, add
+    var added = 0;
+    for(var i=0; i<allRecs.length; i++){
+      var p = parseDPH(allRecs[i]);
+      if(!p.score) continue;
+      if(knownNames[p.name.toLowerCase()]) continue;
+
+      var coords = await geocode(p.addr);
+      if(coords){
+        addMarker(p.name,p.addr,p.score,p.date,coords.lat,coords.lng,p.id);
+        added++;
+      }
+      // Rate-limit Mapbox calls
+      if(i < allRecs.length-1) await new Promise(function(r){setTimeout(r,80)});
+    }
+    return added;
+  }
+
+  // ─── Viewport-based loading ───
+  // When the user pans or zooms, check which city zones are visible
+  // and fetch any we haven't loaded yet
+  async function onViewportChange(){
+    if(viewportLoading) return;
+
+    var bounds = map.getBounds();
+    var zoom = map.getZoom();
+
+    // Only auto-load when zoomed in enough (zoom >= 12)
+    if(zoom < 12) return;
+
+    // Find city zones whose center is within the visible bounds
+    var citiesToFetch = [];
+    CITY_ZONES.forEach(function(cz){
+      if(!fetchedCities[cz.name] && bounds.contains([cz.lat, cz.lng])){
+        citiesToFetch.push(cz.name);
+      }
+    });
+
+    if(!citiesToFetch.length) return;
+
+    viewportLoading = true;
+    showLoadBadge('Loading '+citiesToFetch.join(', ')+'...');
+
+    var totalAdded = 0;
+    for(var i=0; i<citiesToFetch.length; i++){
+      var city = citiesToFetch[i];
+      fetchedCities[city] = true;
+      showLoadBadge('Fetching '+city+' ('+(i+1)+'/'+citiesToFetch.length+')...');
+      try{
+        var added = await fetchCity(city);
+        totalAdded += added;
+      } catch(e){
+        console.warn('Failed to fetch '+city, e);
+      }
+    }
+
+    hideLoadBadge();
+    if(totalAdded > 0){
+      setStatus(markers.length+' restaurants total (+'+totalAdded+' new from '+citiesToFetch.join(', ')+')');
+    }
+
+    // Re-apply any active filters
+    var q = document.getElementById('search').value.trim();
+    var gf = document.getElementById('grade').value;
+    if(q || gf !== 'all') filter();
+
+    viewportLoading = false;
+  }
+
+  // Debounce viewport changes so we don't fire on every frame during a pan
+  var viewportTimer = null;
+  function debouncedViewportChange(){
+    clearTimeout(viewportTimer);
+    viewportTimer = setTimeout(onViewportChange, 800);
+  }
+
+  // ─── Geolocation ───
+  function locate(){
+    if(!navigator.geolocation){alert('Geolocation not supported');return}
+    navigator.geolocation.getCurrentPosition(function(p){
+      var lat=p.coords.latitude, lng=p.coords.longitude;
+      if(userMarker)map.removeLayer(userMarker);
+      userMarker=L.marker([lat,lng],{icon:L.divIcon({className:'',iconSize:[16,16],iconAnchor:[8,8],
+        html:'<div style="width:16px;height:16px;border-radius:50%;background:#3b82f6;border:3px solid #fff;box-shadow:0 0 0 6px rgba(59,130,246,.25)"></div>'
+      })}).addTo(map).bindPopup('<b>You are here</b>').openPopup();
+      map.setView([lat,lng],15);
+    },function(e){alert('Location error: '+e.message)},{enableHighAccuracy:true,timeout:10000});
+  }
+
+  // ─── UI ───
+  function setStatus(t){document.getElementById('status').textContent=t}
+  function showLoadBadge(t){
+    document.getElementById('loadBadgeText').textContent=t;
+    document.getElementById('loadBadge').classList.add('visible');
+  }
+  function hideLoadBadge(){document.getElementById('loadBadge').classList.remove('visible')}
+
+  document.getElementById('search').addEventListener('input',filter);
+  document.getElementById('grade').addEventListener('change',filter);
+  document.getElementById('locateBtn').addEventListener('click',locate);
+
+  // ─── Map events for viewport loading ───
+  map.on('moveend', debouncedViewportChange);
+  map.on('zoomend', debouncedViewportChange);
+
+  // ─── Init ───
+  loadPreloaded();
+  // Mark "Atlanta" and nearby neighborhoods as already handled by preloaded data
+  ['Atlanta','Midtown','Grant Park','Virginia-Highland','Inman Park',
+   'Little Five Points','West End','Westview'].forEach(function(c){fetchedCities[c]=true});
+
+  // Quietly show user location
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(function(p){
+      var lat=p.coords.latitude,lng=p.coords.longitude;
+      if(lat>33.5&&lat<34.2&&lng>-84.9&&lng<-83.9){
+        userMarker=L.marker([lat,lng],{icon:L.divIcon({className:'',iconSize:[16,16],iconAnchor:[8,8],
+          html:'<div style="width:16px;height:16px;border-radius:50%;background:#3b82f6;border:3px solid #fff;box-shadow:0 0 0 6px rgba(59,130,246,.25)"></div>'
+        })}).addTo(map).bindPopup('<b>You are here</b>');
+      }
+    },function(){});
+  }
+
+  // Trigger initial viewport load after a short delay
+  setTimeout(debouncedViewportChange, 2000);
+})();
+</script>
+</body>
+</html>
